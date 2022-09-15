@@ -4,7 +4,7 @@ opencv_python==4.5.4.58
 Pillow==9.0.1
 python_hostlist==1.21
 timm==0.4.12
-torch==1.8.1
-torchvision==0.9.1
 tqdm==4.50.2
 transformers==4.5.1
+tensorboard
+ipdb

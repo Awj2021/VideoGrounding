@@ -111,6 +111,9 @@ class MetricLogger(object):
         self.meters[name] = meter
 
     def log_every(self, iterable, print_freq, header=None):
+        """
+        iterable: dataloader
+        """
         i = 0
         if not header:
             header = ""

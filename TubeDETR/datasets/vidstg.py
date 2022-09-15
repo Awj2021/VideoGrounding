@@ -106,10 +106,14 @@ class VideoModulatedSTGrounding(Dataset):
         video_fps = video["fps"]
         ss = clip_start / video_fps
         t = (clip_end - clip_start) / video_fps
-        cmd = ffmpeg.input(vid_path, ss=ss, t=t).filter("fps", fps=len(frame_ids) / t)
-        out, _ = cmd.output("pipe:", format="rawvideo", pix_fmt="rgb24").run(
-            capture_stdout=True, quiet=True
-        )
+        try:
+            cmd = ffmpeg.input(vid_path, ss=ss, t=t).filter("fps", fps=len(frame_ids) / t)
+            out, _ = cmd.output("pipe:", format="rawvideo", pix_fmt="rgb24").run(
+                capture_stdout=True, quiet=True
+            )
+        except ffmpeg.Error as e:
+            print('stdout:', e.stdout.decode('utf8'))
+            print('stderr', e.stderr.decode('utf8'))
         w = video["width"]
         h = video["height"]
         images_list = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3])

@@ -19,7 +19,6 @@ from util.metrics import MetricLogger, SmoothedValue
 from util.misc import targets_to
 from util.optim import adjust_learning_rate, update_ema
 
-
 def train_one_epoch(
     model: torch.nn.Module,
     criterion: Optional[torch.nn.Module],
@@ -31,7 +30,6 @@ def train_one_epoch(
     args,
     max_norm: float = 0,
     model_ema: Optional[torch.nn.Module] = None,
-    writer=None,
 ):
     model.train()
     if criterion is not None:
@@ -163,9 +161,9 @@ def train_one_epoch(
         metric_logger.update(
             loss=loss_value, **loss_dict_reduced_scaled, **loss_dict_reduced_unscaled
         )
-        if writer is not None and dist.is_main_process() and i % 100 == 0:
-            for k in loss_dict_reduced_unscaled:
-                writer.add_scalar(f"{k}", metric_logger.meters[k].avg, i)
+        # if writer is not None and dist.is_main_process() and i % 100 == 0:
+        #     for k in loss_dict_reduced_unscaled:
+        #         writer.add_scalar(f"{k}", metric_logger.meters[k].avg, i)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
         metric_logger.update(lr_backbone=optimizer.param_groups[1]["lr"])
         metric_logger.update(lr_text_encoder=optimizer.param_groups[2]["lr"])

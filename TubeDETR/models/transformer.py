@@ -19,7 +19,7 @@ from transformers import RobertaModel, RobertaTokenizer
 import math
 
 from .position_encoding import TimeEmbeddingSine, TimeEmbeddingLearned
-
+import ipdb
 
 class Transformer(nn.Module):
     def __init__(
@@ -273,9 +273,10 @@ class Transformer(nn.Module):
                 == src.shape[1] // text_memory_resized.shape[1]
                 == mask.shape[0] // text_attention_mask.shape[0]
             )
-            tokenized._encodings = [
-                elt for elt in tokenized._encodings for _ in range(n_repeat)
-            ]  # repeat batchencodings output (BT)
+            # ipdb.set_trace()
+            # tokenized._encodings = [
+            #     elt for elt in tokenized._encodings for _ in range(n_repeat)
+            # ]  # repeat batchencodings output (BT)
             text_attention_mask_orig = text_attention_mask
             text_attention_mask = torch.stack(
                 [

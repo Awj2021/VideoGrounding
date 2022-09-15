@@ -27,7 +27,7 @@ from datasets.hcstvg_eval import HCSTVGEvaluator
 from engine import evaluate, train_one_epoch
 from models import build_model
 from models.postprocessors import build_postprocessors
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 
 
 def get_args_parser():
@@ -236,7 +236,7 @@ def get_args_parser():
         "--start-epoch", default=0, type=int, metavar="N", help="start epoch"
     )
     parser.add_argument("--eval", action="store_true", help="Only run evaluation")
-    parser.add_argument("--num_workers", default=3, type=int)
+    parser.add_argument("--num_workers", default=0, type=int)
 
     # Distributed training parameters
     parser.add_argument(
@@ -415,8 +415,6 @@ def main(args):
     else:
         raise RuntimeError(f"Unsupported optimizer {args.optimizer}")
 
-    """import ipdb;
-    ipdb.set_trace()"""
 
     # Train dataset
     if len(args.combine_datasets) == 0 and not args.eval:
@@ -472,11 +470,21 @@ def main(args):
             batch_sampler_train = torch.utils.data.BatchSampler(
                 sampler_train, args.batch_size, drop_last=True
             )
+            # data_loader_train = DataLoader(
+            #     dataset_train,
+            #     batch_sampler=batch_sampler_train,
+            #     collate_fn=partial(utils.video_collate_fn, False, 0),
+            #     num_workers=args.num_workers,
+            #     pin_memory=True,
+            # } 
             data_loader_train = DataLoader(
                 dataset_train,
                 batch_sampler=batch_sampler_train,
+                # batch_size=1,
                 collate_fn=partial(utils.video_collate_fn, False, 0),
                 num_workers=args.num_workers,
+                pin_memory=True,
+                # shuffle=True,
             )
 
     # Val dataset
@@ -600,10 +608,10 @@ def main(args):
             )
         return evaluator_list
 
-    if args.tb_dir and dist.is_main_process():
-        writer = SummaryWriter(args.tb_dir)
-    else:
-        writer = None
+    # if args.tb_dir and dist.is_main_process():
+    #     writer = SummaryWriter(args.tb_dir)
+    # else:
+    #     writer = None
 
     # Runs only evaluation, by default on the validation set unless --test is passed.
     if args.eval:
@@ -663,7 +671,7 @@ def main(args):
             args=args,
             max_norm=args.clip_max_norm,
             model_ema=model_ema,
-            writer=writer,
+            # writer=writer,
         )
         if args.output_dir:
             checkpoint_paths = [output_dir / "checkpoint.pth"]
@@ -724,8 +732,8 @@ def main(args):
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print("Training time {}".format(total_time_str))
-    if writer is not None:
-        writer.close()
+    # if writer is not None:
+    #     writer.close()
 
 
 if __name__ == "__main__":
