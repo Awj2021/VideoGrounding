@@ -5,6 +5,7 @@ import argparse
 import datetime
 import json
 import os
+os.environ['CUDA_VISIBLE_DEVICES']='1'
 import random
 import time
 from collections import namedtuple

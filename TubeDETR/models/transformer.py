@@ -15,7 +15,7 @@ from typing import List, Optional
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from transformers import RobertaModel, RobertaTokenizerFast
+from transformers import RobertaModel, RobertaTokenizer
 import math
 
 from .position_encoding import TimeEmbeddingSine, TimeEmbeddingLearned
@@ -127,13 +127,14 @@ class Transformer(nn.Module):
         self.rd_init_tsa = rd_init_tsa
         self._reset_temporal_parameters()
 
-        self.tokenizer = RobertaTokenizerFast.from_pretrained(
-            text_encoder_type, local_files_only=True
-        )
-        self.text_encoder = RobertaModel.from_pretrained(
-            text_encoder_type, local_files_only=True
-        )
-
+        # self.tokenizer = RobertaTokenizerFast.from_pretrained(
+        #     text_encoder_type, local_files_only=True
+        # )
+        # self.text_encoder = RobertaModel.from_pretrained(
+        #     text_encoder_type, local_files_only=True
+        # )
+        self.tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
+        self.text_encoder = RobertaModel.from_pretrained('roberta-base')
         if freeze_text_encoder:
             for p in self.text_encoder.parameters():
                 p.requires_grad_(False)

@@ -4,11 +4,11 @@ import copy
 from tqdm import tqdm
 
 # load config
-with open("../config/vidstg.json", "r") as f:
+with open("config/vidstg.json", "r") as f:
     cfg = json.load(f)
-video_path = os.path.join(cfg.vidstg_img_path, "video")
-ann_path = cfg.vidstg_ann_path
-vidor_path = cfg.vidstg_vid_path
+# video_path = os.path.join(cfg.vidstg_img_path, "video")
+ann_path = cfg['vidstg_ann_path']
+vidor_path = cfg['vidstg_ann_path']
 
 # preproc VidOR annotations
 vidor_dirs = ["training", "validation"]
@@ -63,7 +63,8 @@ print(categories)
 
 # preproc VidSTG annotations
 files = ["train_annotations.json", "val_annotations.json", "test_annotations.json"]
-for file in files:
+
+for file in tqdm(files):
     videos = []
     trajectories = {}
     annotations = json.load(open(os.path.join(ann_path, file), "r"))
