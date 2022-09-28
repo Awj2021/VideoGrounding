@@ -18,6 +18,7 @@ from datasets.hcstvg_eval import HCSTVGEvaluator
 from util.metrics import MetricLogger, SmoothedValue
 from util.misc import targets_to
 from util.optim import adjust_learning_rate, update_ema
+import ipdb
 
 def train_one_epoch(
     model: torch.nn.Module,
@@ -58,7 +59,6 @@ def train_one_epoch(
         durations = batch_dict["durations"]
         captions = batch_dict["captions"]
         targets = batch_dict["targets"]
-
         targets = targets_to(targets, device)
 
         # forward
@@ -102,10 +102,19 @@ def train_one_epoch(
         targets = [
             x for x in targets if len(x["boxes"])
         ]  # keep only targets in the annotated moment
+        ## here have an error: len(outputs["pred_boxes"]) = 1, while len(targets)=0.
+
         assert len(targets) == len(outputs["pred_boxes"]), (
             len(outputs["pred_boxes"]),
             len(targets),
         )
+
+        #### If I change the code to below, there will be an error: 
+        #### RuntimeError: CUDA error: device-side assert triggered
+        # if len(targets) != len(outputs['pred_boxes']):
+        #     if len(targets) == 0:
+        #         print('The tragets have error.')
+
         # mask with padded positions set to False for loss computation
         if args.sted:
             time_mask = torch.zeros(b, outputs["pred_sted"].shape[1]).bool().to(device)
@@ -122,7 +131,7 @@ def train_one_epoch(
         losses = sum(
             loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict
         )
-
+        # ipdb.set_trace()
         # reduce losses over all GPUs for logging purposes
         loss_dict_reduced = dist.reduce_dict(loss_dict)
         loss_dict_reduced_unscaled = {
