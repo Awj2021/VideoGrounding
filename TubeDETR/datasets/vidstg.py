@@ -7,7 +7,7 @@ import time
 import ffmpeg
 import numpy as np
 import random
-
+import ipdb
 
 class VideoModulatedSTGrounding(Dataset):
     def __init__(
@@ -34,6 +34,7 @@ class VideoModulatedSTGrounding(Dataset):
         :param tmp_crop: whether to use temporal cropping preserving the annotated moment
         :param tmp_loc: whether to use temporal localization annotations
         :param stride: temporal stride k
+        # :param invalid_ids: the invalid videos ids for filterring in __getitem__
         """
         self.vid_folder = vid_folder
         print("loading annotations into memory...")
@@ -52,6 +53,10 @@ class VideoModulatedSTGrounding(Dataset):
         )  # map video_id to [list of frames to be forwarded, list of frames in the annotated moment]
         self.stride = stride
         for i_vid, video in enumerate(self.annotations["videos"]):
+            #### TODO: Here can add the logic to filter out the invalid video_ids, 
+            #### and remaining the correct(valid) video ids.
+            # if video['original_video_id'] in self.invalid_ids:
+            #     continue
             video_fps = video["fps"]  # used for extraction
             sampling_rate = fps / video_fps
             assert sampling_rate <= 1  # downsampling at fps
@@ -117,6 +122,23 @@ class VideoModulatedSTGrounding(Dataset):
         w = video["width"]
         h = video["height"]
         images_list = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3])
+        # maybe images_list is different from frame_ids.
+        #### Method1. There are some latent risk to have an error.
+        # if len(images_list) != len(frame_ids):
+        #     print(video_original_id)
+        #     images_list = images_list[:len(frame_ids), :, :, :]
+        
+        #### TODO: Method2.
+        # if len(images_list) != len(frame_ids):
+        #     del annotations['videos'][idx]
+        #     return self.__getitem__(idx)
+
+        #### Method3. The method cannot work because we set the batchsize=1. 
+        #### See more details: 
+        #### https://discuss.pytorch.org/t/how-to-skip-wrong-document-in-getitem-in-dataset-class/110659
+        if len(images_list) != len(frame_ids):
+            return None
+        ipdb.set_trace()
         assert len(images_list) == len(frame_ids)
 
         # prepare frame-level targets
@@ -258,7 +280,7 @@ class VideoModulatedSTGrounding(Dataset):
 
 def build(image_set, args):
     vid_dir = Path(args.vidstg_vid_path)
-
+    # invalid_ids = ['8588003727', '5755946265']
     if args.test:
         ann_file = Path(args.vidstg_ann_path) / f"test.json"
     elif image_set == "val":

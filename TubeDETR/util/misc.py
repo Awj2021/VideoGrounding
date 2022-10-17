@@ -39,6 +39,7 @@ def get_sha():
 
 def video_collate_fn(do_round, div_vid, batch):
     # div_vid: if set >0, each video is divided into clips of div_vid (number of frames that the model takes as input) consecutive frames
+    batch = list(filter(lambda x: x is not None, batch))
     batch = list(zip(*batch))
     final_batch = {}
     final_batch["samples"] = NestedTensor.from_tensor_list(
@@ -67,7 +68,7 @@ def video_collate_fn(do_round, div_vid, batch):
             for video_id, qtype in zip(final_batch["video_ids"], final_batch["qtype"])
         }
 
-    if div_vid:
+    if div_vid:  # 0
         n_fwds = [
             math.ceil(t / div_vid) for t in final_batch["durations"]
         ]  # number of forwards for each video

@@ -21,9 +21,11 @@ from torch.utils.data import ConcatDataset, DataLoader, DistributedSampler
 
 import util.dist as dist
 import util.misc as utils
+from util.logger import setup_logger
 from datasets import build_dataset
 from datasets.vidstg_eval import VidSTGEvaluator
 from datasets.hcstvg_eval import HCSTVGEvaluator
+from datasets.chaos_eval import ChaosEvaluator
 from engine import evaluate, train_one_epoch
 from models import build_model
 from models.postprocessors import build_postprocessors
@@ -340,20 +342,21 @@ def get_args_parser():
 
 def main(args):
     # Init distributed mode
+    # TODO: maybe could use the distributed mode.
     dist.init_distributed_mode(args)
     # Update dataset specific configs
     if args.dataset_config is not None:
         # https://stackoverflow.com/a/16878364
-        d = vars(args)
+        d = vars(args) # convert the args into dict.
         with open(args.dataset_config, "r") as f:
             cfg = json.load(f)
         d.update(cfg)
-
-    print("git:\n  {}\n".format(utils.get_sha()))
-    print(args)
+    output_dir = Path(args.output_dir)
+    logger = setup_logger("Video Grounding", output_dir, 'train_log.txt' )
+    logger.info("git:\n  {}\n".format(utils.get_sha()))
+    logger.info('Args:\n {}'.format(args))
 
     device = torch.device(args.device)
-    output_dir = Path(args.output_dir)
 
     # fix the seed for reproducibility
     seed = args.seed + dist.get_rank()
@@ -375,8 +378,9 @@ def main(args):
             model, device_ids=[args.gpu], find_unused_parameters=True
         )
         model_without_ddp = model.module
+    logger.info('Training distributed: {}'.format(args.distributed))
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print("number of params:", n_parameters)
+    logger.info("number of params: {}".format(n_parameters))
 
     # Set up optimizers
     param_dicts = [
@@ -424,7 +428,7 @@ def main(args):
     if not args.eval:
         dataset_train = ConcatDataset(
             [
-                build_dataset(name, image_set="train", args=args)
+                build_dataset(name, image_set="train", args=args, logger=logger)
                 for name in args.combine_datasets
             ]
         )
@@ -498,7 +502,7 @@ def main(args):
 
     val_tuples = []
     for dset_name in args.combine_datasets_val:
-        dset = build_dataset(dset_name, image_set="val", args=args)
+        dset = build_dataset(dset_name, image_set="val", args=args, logger=logger)
         sampler = (
             DistributedSampler(dset, shuffle=False)
             if args.distributed
@@ -606,6 +610,18 @@ def main(args):
                     tmp_loc=args.sted,
                 )
             )
+        if "chaos" in dataset_name:
+            evaluator_list.append(
+                ChaosEvaluator(
+                    args.chaos_ann_path,
+                    "test" if args.test else "val",
+                    iou_thresholds=[0.3, 0.5],
+                    fps=args.fps,
+                    video_max_len=args.video_max_len,
+                    save_pred=args.test,
+                    tmp_loc=args.sted,
+                )
+            )
         return evaluator_list
 
     # if args.tb_dir and dist.is_main_process():
@@ -648,15 +664,15 @@ def main(args):
 
     # Runs training and evaluates after every --eval_skip epochs
     print("Start training")
+    logger.info("=== Start training ===")
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
         if args.epoch_chunks > 0:
             sampler_train = samplers_train[epoch % len(samplers_train)]
             data_loader_train = data_loaders_train[epoch % len(data_loaders_train)]
-            print(
-                f"Starting epoch {epoch // len(data_loaders_train)}, sub_epoch {epoch % len(data_loaders_train)}"
-            )
+            logger.info(f"Starting epoch {epoch // len(data_loaders_train)}, sub_epoch {epoch % len(data_loaders_train)}")
         else:
+            logger.info(f"Starting epoch {epoch}")
             print(f"Starting epoch {epoch}")
         if args.distributed:
             sampler_train.set_epoch(epoch)
@@ -680,6 +696,7 @@ def main(args):
                 (epoch + 1) % args.lr_drop == 0
                 or (epoch + 1) % 2 == 0
                 or (args.combine_datasets_val[0] == "vidstg")
+                or (args.combine_datasets_val[0] == "chaos")
             ):
                 checkpoint_paths.append(output_dir / f"checkpoint{epoch:04}.pth")
             for checkpoint_path in checkpoint_paths:

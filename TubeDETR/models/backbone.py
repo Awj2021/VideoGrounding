@@ -232,7 +232,7 @@ class Joiner(nn.Sequential):
 
         return out, pos
 
-
+# backbone: resnet101
 def build_backbone(args):
     position_embedding = build_position_encoding(args)
     train_backbone = args.lr_backbone > 0
@@ -248,6 +248,7 @@ def build_backbone(args):
             args.backbone, train_backbone, False, args.dilation
         )
     else:
+        # 默认是resnet101.
         backbone = Backbone(args.backbone, train_backbone, False, args.dilation)
     model = Joiner(backbone, position_embedding)
     if args.freeze_backbone:

@@ -9,12 +9,12 @@ import numpy as np
 import random
 import ipdb
 
-
 class VideoModulatedSTGrounding(Dataset):
     def __init__(
         self,
         vid_folder,
         ann_file,
+        logger,
         transforms,
         is_train=False,
         video_max_len=200,
@@ -27,6 +27,7 @@ class VideoModulatedSTGrounding(Dataset):
         """
         :param vid_folder: path to the folder containing a folder "video"
         :param ann_file: path to the json annotation file
+        :param logger: the log records.
         :param transforms: video data transforms to be applied on the videos and boxes
         :param is_train: whether training or not
         :param video_max_len: maximum number of frames to be extracted from a video
@@ -38,10 +39,13 @@ class VideoModulatedSTGrounding(Dataset):
         # :param invalid_ids: the invalid videos ids for filterring in __getitem__
         """
         self.vid_folder = vid_folder
+        self.logger = logger
         print("loading annotations into memory...")
         tic = time.time()
+        # TODO: if the annotation is not satisfied, please check with other code.
         self.annotations = json.load(open(ann_file, "r"))
-        print("Done (t={:0.2f}s)".format(time.time() - tic))
+        # print("Done (t={:0.2f}s)".format(time.time() - tic))
+        self.logger.info("Done (t={:0.2f}s)".format(time.time() - tic))
         self._transforms = transforms
         self.is_train = is_train
         self.video_max_len = video_max_len
@@ -53,12 +57,17 @@ class VideoModulatedSTGrounding(Dataset):
             {}
         )  # map video_id to [list of frames to be forwarded, list of frames in the annotated moment]
         self.stride = stride
+        # self.videos = []
         for i_vid, video in enumerate(self.annotations["videos"]):
-            #### TODO: Here can add the logic to filter out the invalid video_ids, 
-            #### and remaining the correct(valid) video ids.
-            # if video['original_video_id'] in self.invalid_ids:
-            #     continue
+            ### Checking the size of videos.
+            vid_path = os.path.join(self.vid_folder, str(video["video_path"]))
+            probe = ffmpeg.probe(vid_path)
+            if probe['streams'][0]['width'] != 1280 or probe['streams'][0]['height'] !=720:
+                self.logger.info('=== Check the size of Video: {}'.format(vid_path))
+                # print(video['video_path'])
+                continue
 
+            # self.videos.append(video)
             video_fps = video["fps"]  # used for extraction
             sampling_rate = fps / video_fps
             assert sampling_rate <= 1  # downsampling at fps
@@ -77,7 +86,7 @@ class VideoModulatedSTGrounding(Dataset):
                     frame_ids[(j * len(frame_ids)) // video_max_len]
                     for j in range(video_max_len)
                 ]
-
+            # 采样之后，只选择在tube_start_frame 和 tube_end_frame之间的帧。
             inter_frames = set(
                 [
                     frame_id
@@ -86,6 +95,7 @@ class VideoModulatedSTGrounding(Dataset):
                 ]
             )  # frames in the annotated moment
             self.vid2imgids[video["video_id"]] = [frame_ids, inter_frames]
+        self.logger.info('=== Loading all the videos')
 
     def __len__(self) -> int:
         return len(self.annotations["videos"])
@@ -99,63 +109,59 @@ class VideoModulatedSTGrounding(Dataset):
         tmp_target: video-level target, dictionary with keys video_id, qtype, inter_idx, frames_id, caption
         """
         video = self.annotations["videos"][idx]
+        # video = self.videos[idx]
         caption = video["caption"]
         video_id = video["video_id"]
         video_original_id = video["original_video_id"]
         clip_start = video["start_frame"]  # included
         clip_end = video["end_frame"]  # excluded
         frame_ids, inter_frames = self.vid2imgids[video_id]
-        trajectory = self.annotations["trajectories"][video_original_id][
-            str(video["target_id"])
+        trajectory = self.annotations["trajectories"][video_id][
+            str(int(video["tid"]))
         ]
-
+        # print(video_id)
+        length = int(list(trajectory)[-1]) - int(list(trajectory)[0]) + 1 
+        ### TODO: check the len(trajectory.keys()) as the keys is not continuous. 
+        # assert len(list(trajectory)) == length, (
+        #     print('Missing some frames in segment: {}/{}'.format(video_id, video_original_id))
+        # )   
         # ffmpeg decoding
-        vid_path = os.path.join(self.vid_folder, "video", video["video_path"])
+        vid_path = os.path.join(self.vid_folder, video["video_path"])
         video_fps = video["fps"]
-        ss = clip_start / video_fps
-        t = (clip_end - clip_start) / video_fps
+        ss = clip_start / video_fps             # 帧开始的时间，
+        t = (clip_end - clip_start) / video_fps # 相于开始帧，结束帧的相对时间
         try:
-            cmd = ffmpeg.input(vid_path, ss=ss, t=t).filter("fps", fps=len(frame_ids) / t)
+            cmd = ffmpeg.input(vid_path, ss=ss, t=t).filter("fps", fps=len(frame_ids) / t) # fps: len(frame_ids) / t: 单位时间内采样的帧数
             out, _ = cmd.output("pipe:", format="rawvideo", pix_fmt="rgb24").run(
                 capture_stdout=True, quiet=True
             )
         except ffmpeg.Error as e:
             print('stdout:', e.stdout.decode('utf8'))
             print('stderr', e.stderr.decode('utf8'))
-        w = video["width"]
-        h = video["height"]
-        images_list = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3])
-        # maybe images_list is different from frame_ids.
-        #### Method1. There are some latent risk to have an error.
-        # if len(images_list) != len(frame_ids):
-        #     print(video_original_id)
-        #     images_list = images_list[:len(frame_ids), :, :, :]
-        
-        #### TODO: Method2.
-        # if len(images_list) != len(frame_ids):
-        #     del annotations['videos'][idx]
-        #     return self.__getitem__(idx)
+        w = video["width"] * 4 # 1280
+        h = video["height"] * 4 # 720
 
-        #### Method3. The method cannot work because we set the batchsize=1. 
-        #### See more details: 
-        #### https://discuss.pytorch.org/t/how-to-skip-wrong-document-in-getitem-in-dataset-class/110659
-        # if len(images_list) != len(frame_ids):
-            # return None
-
+        images_list = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3]) # 问题确认：报错是因为out转换之后，不能整除进行转换。
+        # ipdb.set_trace()
         assert len(images_list) == len(frame_ids)
 
         # prepare frame-level targets
         targets_list = []
         inter_idx = []  # list of indexes of the frames in the annotated moment
-        for i_img, img_id in enumerate(frame_ids):
-            if img_id in inter_frames:
-                anns = trajectory[
-                    str(img_id)
-                ]  # dictionary with bbox [left, top, width, height] key
+        for i_img, img_id in enumerate(frame_ids): # 采样后start, end_frame对应的帧
+            if img_id in inter_frames: # 采样后tube对应的帧
+                try:
+                    anns = trajectory[
+                        str(img_id)
+                    ]  # dictionary with bbox [left, top, width, height] key
+                except: 
+                    self.logger.info("=== Sampling has Wrong: {} Missing frame: {}".format(video_id, str(img_id)))
+                    raise ValueError('Please Checking!!!')
                 anns = [anns]
                 inter_idx.append(i_img)
             else:
                 anns = []
+            # ipdb.set_trace()
             target = prepare(w, h, anns)
             target["image_id"] = f"{video_id}_{img_id}"
             targets_list.append(target)
@@ -281,23 +287,23 @@ class VideoModulatedSTGrounding(Dataset):
         return images, targets, tmp_target
 
 
-def build(image_set, args):
-    vid_dir = Path(args.vidstg_vid_path)
-    # invalid_ids = ['8588003727', '5755946265']
+def build(image_set, args, logger):
+    vid_dir = Path(args.chaos_vid_path)
     if args.test:
-        ann_file = Path(args.vidstg_ann_path) / f"test.json"
+        ann_file = Path(args.chaos_ann_path) / f"test.json"
     elif image_set == "val":
-        ann_file = Path(args.vidstg_ann_path) / f"val.json"
+        ann_file = Path(args.chaos_ann_path) / f"val.json"
     else:
         ann_file = (
-            Path(args.vidstg_ann_path) / f"train.json"
+            Path(args.chaos_ann_path) / f"train.json"
             if args.video_max_len_train == 200 or (not args.sted)
-            else Path(args.vidstg_ann_path) / f"train_{args.video_max_len_train}.json"
+            else Path(args.chaos_ann_path) / f"train_{args.video_max_len_train}.json"
         )
-
+    logger.info("anno_file: {}".format(ann_file))
     dataset = VideoModulatedSTGrounding(
         vid_dir,
         ann_file,
+        logger,
         transforms=make_video_transforms(
             image_set, cautious=True, resolution=args.resolution
         ),

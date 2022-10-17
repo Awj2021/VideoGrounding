@@ -2,7 +2,6 @@ import json
 import os
 import copy
 from tqdm import tqdm
-
 # load config
 with open("config/vidstg.json", "r") as f:
     cfg = json.load(f)
@@ -28,21 +27,23 @@ for dir in vidor_dirs:
                 "width": annot["width"],
                 "height": annot["height"],
             }
+            # 判断是否出现重复的tid.
             assert len(set(x["tid"] for x in annot["subject/objects"])) == len(
                 annot["subject/objects"]
             )
+            # 简化字典形式
             out["objects"] = {
-                obj["tid"]: obj["category"] for obj in annot["subject/objects"]
+                obj["tid"]: obj["category"] for obj in annot["subject/objects"] # like: 0:'adult'
             }
             trajectories = {}
             for i_frame, traj in enumerate(annot["trajectories"]):
                 for bbox in traj:
                     if bbox["tid"] not in trajectories:
                         trajectories[bbox["tid"]] = {}
-                        category = out["objects"][bbox["tid"]]
+                        category = out["objects"][bbox["tid"]] # like 'adult'
                         if category not in categories:
                             category_id = len(categories)
-                            categories[category] = category_id
+                            categories[category] = category_id # 先到先得，依次编号
                         else:
                             category_id = categories[category]
                     trajectories[bbox["tid"]][i_frame] = {
@@ -73,8 +74,8 @@ for file in tqdm(files):
         if "train" in file or "val" in file
         else json.load(open(os.path.join(ann_path, "vidor_validation.json"), "r"))
     )
-    for annot in tqdm(annotations):
-        annot_vidor = vidor[annot["vid"]]
+    for annot in tqdm(annotations):  # train_annotations.json
+        annot_vidor = vidor[annot["vid"]] # like: 2626670574
         out = {
             "original_video_id": annot["vid"],
             "frame_count": annot["frame_count"],
@@ -85,22 +86,22 @@ for file in tqdm(files):
             "end_frame": annot["used_segment"]["end_fid"],
             "tube_start_frame": annot["temporal_gt"]["begin_fid"],
             "tube_end_frame": annot["temporal_gt"]["end_fid"],
-            "video_path": annot_vidor["video_path"],
+            "video_path": annot_vidor["video_path"], # like 0001/2626670574.mp4
         }
 
         for query in annot["questions"]:  # interrogative sentences
             video = copy.deepcopy(out)
             video["caption"] = query["description"]
             video["type"] = query["type"]
-            video["target_id"] = query["target_id"]
+            video["target_id"] = query["target_id"] # 这个target_id代表什么
             video["video_id"] = len(videos)
             video["qtype"] = "interrogative"
             videos.append(video)
             # get the trajectory
             if annot["vid"] not in trajectories:
                 trajectories[annot["vid"]] = {}
-            if str(query["target_id"]) not in trajectories[annot["vid"]]:
-                trajectories[annot["vid"]][str(query["target_id"])] = annot_vidor[
+            if str(query["target_id"]) not in trajectories[annot["vid"]]:  # 策略是将vidor的整个trajectories都加入进去
+                trajectories[annot["vid"]][str(query["target_id"])] = annot_vidor[ # e.g. trajectories['2727682922']['4']
                     "trajectories"
                 ][str(query["target_id"])]
             # check that the annotated moment corresponds to annotated boxes

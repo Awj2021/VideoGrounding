@@ -8,12 +8,12 @@ import util.dist as dist
 import json
 from functools import reduce
 from util.box_ops import np_box_iou
+import ipdb
 
-
-class VidSTGiouEvaluator:
+class ChaosiouEvaluator:
     def __init__(
         self,
-        vidstg_path: str,
+        chaos_path: str,
         subset: str = "test",
         verbose: bool = True,
         iou_thresholds: list = [0.3, 0.5],
@@ -22,7 +22,7 @@ class VidSTGiouEvaluator:
         tmp_loc=True,
     ):
         """
-        :param vidstg_path: path to VidSTG annotations
+        :param chaos_path: path to Chaos annotations
         :param subset: train, val or test
         :param verbose: whether to print more information or not
         :param iou_thresholds: IoU thresholds for the vIoU metrics
@@ -31,15 +31,15 @@ class VidSTGiouEvaluator:
         :param tmp_loc: whether to evaluate temporal localization
         """
 
-        assert subset in ["train", "test", "val"], f"Wrong VidSTG subset {subset}"
+        assert subset in ["train", "test", "val"], f"Wrong Chaos subset {subset}"
 
         self.iou_thresholds = iou_thresholds
         self.tmp_loc = tmp_loc
 
-        vidstg_path = Path(vidstg_path)
+        chaos_path = Path(chaos_path)
 
         # We load the image ids corresponding to the current subset
-        path = vidstg_path / f"{subset}.json"
+        path = chaos_path / f"{subset}.json"
         self.anns = json.load(open(path, "r"))
         self.vid2imgids = (
             {}
@@ -75,17 +75,27 @@ class VidSTGiouEvaluator:
             ]
             for frame_id in frame_ids:
                 if video["tube_start_frame"] <= frame_id < video["tube_end_frame"]:
-                    x1, y1, w, h = self.anns["trajectories"][
-                        video["original_video_id"]
-                    ][str(video["target_id"])][str(frame_id)]["bbox"]
-                    x2 = x1 + w
-                    y2 = y1 + h
-                    self.img2box[f"{video_id}_{frame_id}"] = [[x1, y1, x2, y2]]
-                    inter_frames.append(f"{video_id}_{frame_id}")
+                    # ipdb.set_trace()
+                    try:
+                        x1, y1, w, h = self.anns["trajectories"][
+                            video["video_id"]
+                        ][str(int(video["tid"]))][str(frame_id)]["bbox"]
+                        x2 = x1 + w
+                        y2 = y1 + h
+                        self.img2box[f"{video_id}_{frame_id}"] = [[x1, y1, x2, y2]]
+                        inter_frames.append(f"{video_id}_{frame_id}")
+                    except: 
+                        print(self.anns["trajectories"])
+                        print(video["video_id"])
+                        print(str(int(video["tid"])))
+                        print(str(frame_id)) # 这里是255
+                        raise ValueError('Stop!!!')
+
+
             self.vid2imgids[video_id] = [frame_ids, inter_frames]
 
         if verbose:
-            print(f"VidSTG subset contains {len(self.vid2imgids)} videos")
+            print(f"Chaos subset contains {len(self.vid2imgids)} videos")
             print(f"There are {len(self.imgid2box)} images to evaluate")
 
     def evaluate(self, predictions: List[Dict], video_predictions: List[Dict]):
@@ -205,10 +215,10 @@ class VidSTGiouEvaluator:
         return vid_metrics
 
 
-class VidSTGEvaluator(object):
+class ChaosEvaluator(object):
     def __init__(
         self,
-        vidstg_path,
+        chaos_path,
         subset,
         iou_thresholds=[0.3, 0.5],
         fps=5,
@@ -217,7 +227,7 @@ class VidSTGEvaluator(object):
         tmp_loc=True,
     ):
         """
-        :param vidstg_path: path to VidSTG annotations
+        :param chaos_path: path to Chaos annotations
         :param subset: train, val or test
         :param verbose: whether to print more information or not
         :param iou_thresholds: IoU thresholds for the vIoU metrics
@@ -225,8 +235,8 @@ class VidSTGEvaluator(object):
         :param video_max_len: maximum number of frames to be extracted from a video
         :param save_pred: whether to save predictions in the output of summarize
         """
-        self.evaluator = VidSTGiouEvaluator(
-            vidstg_path,
+        self.evaluator = ChaosiouEvaluator(
+            chaos_path,
             subset=subset,
             verbose=False,
             iou_thresholds=iou_thresholds,

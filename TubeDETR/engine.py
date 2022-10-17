@@ -15,6 +15,7 @@ import torch.optim
 import util.dist as dist
 from datasets.vidstg_eval import VidSTGEvaluator
 from datasets.hcstvg_eval import HCSTVGEvaluator
+from datasets.chaos_eval import ChaosEvaluator
 from util.metrics import MetricLogger, SmoothedValue
 from util.misc import targets_to
 from util.optim import adjust_learning_rate, update_ema
@@ -300,6 +301,10 @@ def evaluate(
 
         vidstg_res = {} if "vidstg" in postprocessors.keys() else None
         vidstg_video_res = {} if "vidstg" in postprocessors.keys() else None
+
+        chaos_res = {} if "chaos" in postprocessors.keys() else None
+        chaos_video_res = {} if "chaos" in postprocessors.keys() else None
+
         hcstvg_res = {} if "hcstvg" in postprocessors.keys() else None
         hcstvg_video_res = {} if "hcstvg" in postprocessors.keys() else None
         if "vidstg" in postprocessors.keys():
@@ -331,6 +336,37 @@ def evaluate(
             res = {
                 target["image_id"]: output for target, output in zip(targets, results)
             }
+
+        elif "chaos" in postprocessors.keys():
+            video_ids = batch_dict["video_ids"]
+            frames_id = batch_dict["frames_id"]
+            if args.sted:
+                pred_steds = postprocessors["chaos"](
+                    outputs, frames_id, video_ids=video_ids, time_mask=time_mask
+                )
+
+            image_ids = [t["image_id"] for t in targets]
+            for im_id, result in zip(image_ids, results):
+                chaos_res[im_id] = {"boxes": [result["boxes"].detach().cpu().tolist()]}
+
+            qtypes = batch_dict["qtype"]
+            assert len(set(video_ids)) == len(qtypes)
+            if args.sted:
+                assert len(pred_steds) == len(qtypes)
+                for video_id, pred_sted in zip(video_ids, pred_steds):
+                    chaos_video_res[video_id] = {
+                        "sted": pred_sted,
+                        "qtype": qtypes[video_id],
+                    }
+            else:
+                for video_id in video_ids:
+                    chaos_video_res[video_id] = {
+                        "qtype": qtypes[video_id],
+                    }
+            res = {
+                target["image_id"]: output for target, output in zip(targets, results)
+            }
+
         elif "hcstvg" in postprocessors.keys():
             video_ids = batch_dict["video_ids"]
             frames_id = batch_dict["frames_id"]
@@ -395,6 +431,43 @@ def evaluate(
                         image_ids,
                         video_ids,
                     )
+            elif isinstance(evaluator, ChaosEvaluator):
+                evaluator.update(chaos_res)
+                evaluator.video_update(chaos_video_res)
+                if args.test:
+                    tsa_weights = [
+                        outputs["aux_outputs"][i_aux]["weights"]
+                        for i_aux in range(len(outputs["aux_outputs"]))
+                    ]
+                    tsa_weights.append(outputs["weights"])
+                    weights = torch.stack(tsa_weights)
+                    ca_weights = [
+                        outputs["aux_outputs"][i_aux]["ca_weights"]
+                        for i_aux in range(len(outputs["aux_outputs"]))
+                    ]
+                    ca_weights.append(outputs["ca_weights"])
+                    ca_weights = torch.stack(ca_weights)
+                    text_weights = ca_weights[
+                        ..., -len(memory_cache["text_memory_resized"]) :
+                    ]
+                    spatial_weights = ca_weights[
+                        ..., : -len(memory_cache["text_memory_resized"])
+                    ].reshape(
+                        ca_weights.shape[0],
+                        ca_weights.shape[1],
+                        ca_weights.shape[2],
+                        math.ceil(samples.tensors.shape[2] / 32),
+                        -1,
+                    )  # hw
+                    # tokens = memory_cache['tokenized'].tokens()
+                    evaluator.save(
+                        weights,
+                        text_weights,
+                        spatial_weights,
+                        outputs["pred_sted"],
+                        image_ids,
+                        video_ids,
+                    )
             elif isinstance(evaluator, HCSTVGEvaluator):
                 evaluator.update(hcstvg_res)
                 evaluator.video_update(hcstvg_video_res)
@@ -409,9 +482,12 @@ def evaluate(
 
     vidstg_res = None
     hcstvg_res = None
+    chaos_res = None
     for evaluator in evaluator_list:
         if isinstance(evaluator, VidSTGEvaluator):
             vidstg_res = evaluator.summarize()
+        elif isinstance(evaluator, ChaosEvaluator):
+            chaos_res = evaluator.summarize() 
         elif isinstance(evaluator, HCSTVGEvaluator):
             hcstvg_res = evaluator.summarize()
 
@@ -421,6 +497,9 @@ def evaluate(
 
     if vidstg_res is not None:
         stats["vidstg"] = vidstg_res
+
+    if chaos_res is not None:
+        stats['chaos'] = chaos_res
 
     if hcstvg_res is not None:
         stats["hcstvg"] = hcstvg_res

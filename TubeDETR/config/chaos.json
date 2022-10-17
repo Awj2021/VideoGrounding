@@ -1,6 +1,6 @@
 {
     "combine_datasets": ["chaos"],
     "combine_datasets_val": ["chaos"],
-    "vidstg_vid_path" : "/home/chaos/data/Chaos/video_grounding_old/data/Chaos/annotations",
-    "vidstg_ann_path" : "/home/chaos/data/Chaos/video_grounding_old/data/Chaos/annotations"
+    "chaos_vid_path" : "/home/chaos/data/Chaos/dataset",
+    "chaos_ann_path" : "/home/chaos/data/Chaos/dataset/annotation/video_grounding/tubedetr_format/archive4"
   }

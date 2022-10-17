@@ -16,7 +16,7 @@ import util.dist as dist
 from util import box_ops
 from util.misc import NestedTensor
 
-from .backbone import build_backbone
+from .backbone import build_backbone # load the backbone
 from .transformer import build_transformer
 
 
