@@ -8,11 +8,13 @@ import ffmpeg
 import numpy as np
 import random
 import ipdb
+from tqdm import tqdm
 
 class VideoModulatedSTGrounding(Dataset):
     def __init__(
         self,
         vid_folder,
+        extract_frames_dir,
         ann_file,
         logger,
         transforms,
@@ -39,6 +41,7 @@ class VideoModulatedSTGrounding(Dataset):
         # :param invalid_ids: the invalid videos ids for filterring in __getitem__
         """
         self.vid_folder = vid_folder
+        self.frames_folder = extract_frames_dir
         self.logger = logger
         print("loading annotations into memory...")
         tic = time.time()
@@ -62,7 +65,8 @@ class VideoModulatedSTGrounding(Dataset):
             ### Checking the size of videos.
             vid_path = os.path.join(self.vid_folder, str(video["video_path"]))
             probe = ffmpeg.probe(vid_path)
-            if probe['streams'][0]['width'] != 1280 or probe['streams'][0]['height'] !=720:
+            # Check the size of videos.
+            if probe['streams'][0]['width'] != 320 or probe['streams'][0]['height'] !=180:
                 self.logger.info('=== Check the size of Video: {}'.format(vid_path))
                 # print(video['video_path'])
                 continue
@@ -96,6 +100,10 @@ class VideoModulatedSTGrounding(Dataset):
             )  # frames in the annotated moment
             self.vid2imgids[video["video_id"]] = [frame_ids, inter_frames]
         self.logger.info('=== Loading all the videos')
+        # Because I don't sure whether every .npy file
+        # TODO: Add a switch for extracting frames.
+        self.extract_frames()
+
 
     def __len__(self) -> int:
         return len(self.annotations["videos"])
@@ -109,10 +117,8 @@ class VideoModulatedSTGrounding(Dataset):
         tmp_target: video-level target, dictionary with keys video_id, qtype, inter_idx, frames_id, caption
         """
         video = self.annotations["videos"][idx]
-        # video = self.videos[idx]
         caption = video["caption"]
         video_id = video["video_id"]
-        video_original_id = video["original_video_id"]
         clip_start = video["start_frame"]  # included
         clip_end = video["end_frame"]  # excluded
         frame_ids, inter_frames = self.vid2imgids[video_id]
@@ -120,29 +126,35 @@ class VideoModulatedSTGrounding(Dataset):
             str(int(video["tid"]))
         ]
         # print(video_id)
-        length = int(list(trajectory)[-1]) - int(list(trajectory)[0]) + 1 
+        # length = int(list(trajectory)[-1]) - int(list(trajectory)[0]) + 1 
         ### TODO: check the len(trajectory.keys()) as the keys is not continuous. 
         # assert len(list(trajectory)) == length, (
         #     print('Missing some frames in segment: {}/{}'.format(video_id, video_original_id))
         # )   
         # ffmpeg decoding
-        vid_path = os.path.join(self.vid_folder, video["video_path"])
-        video_fps = video["fps"]
-        ss = clip_start / video_fps             # 帧开始的时间，
-        t = (clip_end - clip_start) / video_fps # 相于开始帧，结束帧的相对时间
-        try:
-            cmd = ffmpeg.input(vid_path, ss=ss, t=t).filter("fps", fps=len(frame_ids) / t) # fps: len(frame_ids) / t: 单位时间内采样的帧数
-            out, _ = cmd.output("pipe:", format="rawvideo", pix_fmt="rgb24").run(
-                capture_stdout=True, quiet=True
-            )
-        except ffmpeg.Error as e:
-            print('stdout:', e.stdout.decode('utf8'))
-            print('stderr', e.stderr.decode('utf8'))
-        w = video["width"] * 4 # 1280
-        h = video["height"] * 4 # 720
+        # vid_path = os.path.join(self.vid_folder, video["video_path"])
+        # video_fps = video["fps"]
+        # ss = clip_start / video_fps             # 帧开始的时间，
+        # t = (clip_end - clip_start) / video_fps # 相于开始帧，结束帧的相对时间
+        # TODO: directly read the corresponding frames that has been extraced.
+        # try:
+        #     cmd = ffmpeg.input(vid_path, ss=ss, t=t).filter("fps", fps=len(frame_ids) / t) # fps: len(frame_ids) / t: 单位时间内采样的帧数
+        #     out, _ = cmd.output("pipe:", format="rawvideo", pix_fmt="rgb24").run(
+        #         capture_stdout=True, quiet=True
+        #     )
+        # except ffmpeg.Error as e:
+        #     print('stdout:', e.stdout.decode('utf8'))
+        #     print('stderr', e.stderr.decode('utf8'))
+        # # w = video["width"] * 4 # 1280
+        # # h = video["height"] * 4 # 720
 
-        images_list = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3]) # 问题确认：报错是因为out转换之后，不能整除进行转换。
+        w = video["width"]
+        h = video["height"]
+
+        # images_list = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3]) # 问题确认：报错是因为out转换之后，不能整除进行转换。
         # ipdb.set_trace()
+        # TODO: here:read the saved npy file. npy file named with video_id.
+        images_list = np.load(os.path.join(self.frames_folder, video_id + '.npy')).reshape([-1, h, w, 3])
         assert len(images_list) == len(frame_ids)
 
         # prepare frame-level targets
@@ -286,9 +298,44 @@ class VideoModulatedSTGrounding(Dataset):
             return images[:, :: self.stride], targets, tmp_target, images
         return images, targets, tmp_target
 
+    def extract_frames(self):
+        """
+        Extract frames and save .npy file.
+        """
+        print('====== Extracting frames ========')
+        for _, video in tqdm(enumerate(self.annotations["videos"])):
+            video_id = video["video_id"]
+            # firstly, check whether the .npy file exists. 
+            if os.path.exists(os.path.join(self.frames_folder, video_id + '.npy')):
+                continue
+            clip_start = video["start_frame"]  # included
+            clip_end = video["end_frame"]  # excluded
+            frame_ids, inter_frames = self.vid2imgids[video_id]
+            vid_path = os.path.join(self.vid_folder, video["video_path"])
+            video_fps = video["fps"]
+            ss = clip_start / video_fps             # 帧开始的时间，
+            t = (clip_end - clip_start) / video_fps # 相于开始帧，结束帧的相对时间
+            # TODO: directly read the corresponding frames that has been extraced.
+            try:
+                cmd = ffmpeg.input(vid_path, ss=ss, t=t).filter("fps", fps=len(frame_ids) / t) # fps: len(frame_ids) / t: 单位时间内采样的帧数
+                out, _ = cmd.output("pipe:", format="rawvideo", pix_fmt="rgb24").run(
+                    capture_stdout=True, quiet=True
+                )
+            except ffmpeg.Error as e:
+                print('stdout:', e.stdout.decode('utf8'))
+                print('stderr', e.stderr.decode('utf8'))
+
+            images_list = np.frombuffer(out, np.uint8)
+            np.save(os.path.join(self.frames_folder, video_id + '.npy'), images_list)
+        
+
 
 def build(image_set, args, logger):
     vid_dir = Path(args.chaos_vid_path)
+    extract_frames_dir = Path(args.chaos_extract_dir)
+    if not os.path.exists(extract_frames_dir):
+        os.makedirs(extract_frames_dir)
+
     if args.test:
         ann_file = Path(args.chaos_ann_path) / f"test.json"
     elif image_set == "val":
@@ -302,6 +349,7 @@ def build(image_set, args, logger):
     logger.info("anno_file: {}".format(ann_file))
     dataset = VideoModulatedSTGrounding(
         vid_dir,
+        extract_frames_dir,
         ann_file,
         logger,
         transforms=make_video_transforms(

@@ -55,7 +55,7 @@ class ChaosiouEvaluator:
                 video["start_frame"] if self.tmp_loc else video["tube_start_frame"]
             )
             end_frame = (
-                video["end_frame"] if self.tmp_loc else video["tube_start_frame"]
+                video["end_frame"] if self.tmp_loc else video["tube_end_frame"]
             )
             frame_ids = [start_frame]
             for frame_id in range(start_frame, end_frame):
@@ -170,7 +170,7 @@ class ChaosiouEvaluator:
                     raise RuntimeError(f"No prediction for frame {image_id}")
                 else:
                     pred_boxes = predictions[image_id]["boxes"]
-                gt_boxes = self.img2box[image_id]
+                gt_boxes = self.img2box[image_id] # ground truth bounding box.
                 iou = np_box_iou(np.array(pred_boxes), np.array(gt_boxes))[0][0]
                 frame_id = int(image_id.split("_")[1])
                 vid_metrics[video_id]["img_metrics"][image_id] = {
@@ -198,7 +198,7 @@ class ChaosiouEvaluator:
                     }
                 )
 
-            # compute gt_viou@R
+            # compute gt_viou@R gt_viou: compute with the ground-truth bounding box.
             gt_viou = gt_viou / max(len(inter_frames), 1)
             vid_metrics[video_id]["gt_viou"] = gt_viou
             gt_recalls = {thresh: 0 for thresh in self.iou_thresholds}
