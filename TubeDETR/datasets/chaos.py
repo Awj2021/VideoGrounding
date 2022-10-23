@@ -327,6 +327,7 @@ class VideoModulatedSTGrounding(Dataset):
 
             images_list = np.frombuffer(out, np.uint8)
             np.save(os.path.join(self.frames_folder, video_id + '.npy'), images_list)
+        print("====== Extracting and Saving frames successfully ========")
         
 
 

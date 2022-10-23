@@ -82,6 +82,7 @@ class ChaosiouEvaluator:
                         ][str(int(video["tid"]))][str(frame_id)]["bbox"]
                         x2 = x1 + w
                         y2 = y1 + h
+                        # TODO: our data format is xyxy. So please check and motify the .json file firstly.
                         self.img2box[f"{video_id}_{frame_id}"] = [[x1, y1, x2, y2]]
                         inter_frames.append(f"{video_id}_{frame_id}")
                     except: 
@@ -92,7 +93,7 @@ class ChaosiouEvaluator:
                         raise ValueError('Stop!!!')
 
 
-            self.vid2imgids[video_id] = [frame_ids, inter_frames]
+            self.vid2imgids[video_id] = [frame_ids, inter_frames] # frame_ids: [1212, 1213, ..], 
 
         if verbose:
             print(f"Chaos subset contains {len(self.vid2imgids)} videos")
@@ -113,18 +114,19 @@ class ChaosiouEvaluator:
                 print(f"Warning, multiple predictions found for video {video_id}")
                 continue
             if self.tmp_loc:
-                gt_sted = self.vid2steds[video_id]
-                pred_sted = video_pred["sted"]
+                gt_sted = self.vid2steds[video_id] # tube_start_time, tube_end_time
+                pred_sted = video_pred["sted"]  # predicted_tube_start, predicate_tube_end.
             qtype = video_pred["qtype"]
             frame_ids, inter_frames = self.vid2imgids[video_id]
 
             # compute temporal iou
             if self.tmp_loc:
-                max_start = max(gt_sted[0], pred_sted[0])
-                min_end = min(gt_sted[1], pred_sted[1])
-                min_start = min(gt_sted[0], pred_sted[0])
-                max_end = max(gt_sted[1], pred_sted[1])
-                if min_end <= max_start:
+                # max_start: 1313 min_end: 1413 min_start: 1289 max_end: 1414
+                max_start = max(gt_sted[0], pred_sted[0]) # pred_sted:    1313.0, 1414.0 
+                min_end = min(gt_sted[1], pred_sted[1])   # ground_truth: 1289, 1413
+                min_start = min(gt_sted[0], pred_sted[0]) # 1289
+                max_end = max(gt_sted[1], pred_sted[1])  # 1414
+                if min_end <= max_start:  # 相当与预测的时间片段没有交集。
                     tiou = 0
                 else:
                     intersection = min_end - max_start
@@ -134,6 +136,7 @@ class ChaosiouEvaluator:
                     tiou = intersection / union
 
                 # compute viou and gt_viou
+                # TODO: tiou: 仅仅为时间的交并比。
                 vid_metrics[video_id] = {
                     "gt_sted": gt_sted,
                     "pred_sted": pred_sted,
@@ -162,7 +165,7 @@ class ChaosiouEvaluator:
                 union_predgt = frame_ids
                 inter_predgt = frame_ids
             gt_viou = 0
-
+            # ipdb.set_trace()
             for i_img, image_id in enumerate(
                 inter_frames
             ):  # iterate on all frames of the annotated moment to update GT metrics
@@ -172,7 +175,7 @@ class ChaosiouEvaluator:
                     pred_boxes = predictions[image_id]["boxes"]
                 gt_boxes = self.img2box[image_id] # ground truth bounding box.
                 iou = np_box_iou(np.array(pred_boxes), np.array(gt_boxes))[0][0]
-                frame_id = int(image_id.split("_")[1])
+                frame_id = int(image_id.split("_")[2])   # TODO: 这里有问题，f"{video_id}_{frame_id}"
                 vid_metrics[video_id]["img_metrics"][image_id] = {
                     "iou": iou,
                     "pred_box": pred_boxes[0],
@@ -181,7 +184,8 @@ class ChaosiouEvaluator:
                 if (
                     frame_id in inter_predgt and self.tmp_loc
                 ):  # update viou if this frame is in the intersection between the annotated moment and the predicted moment
-                    viou += iou
+                    viou += iou  # TODO: 我感觉是这里没有相加。
+                    print('=== Add iou! {} ==='.format(viou))
                 gt_viou += iou
 
             if self.tmp_loc:  # compute viou@R
@@ -318,7 +322,7 @@ class ChaosEvaluator(object):
             categories = set(x["qtype"] for x in self.results.values())
             metrics = {}
             counter = {}
-            for category in categories:  # init metrics
+            for category in categories:  # init metrics 主要有两种，declarative & ins
                 metrics[category] = {"gt_viou": 0}
                 if self.tmp_loc:
                     metrics[category].update({"tiou": 0, "viou": 0})

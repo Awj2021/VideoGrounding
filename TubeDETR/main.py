@@ -5,7 +5,7 @@ import argparse
 import datetime
 import json
 import os
-os.environ['CUDA_VISIBLE_DEVICES']='1'
+os.environ['CUDA_VISIBLE_DEVICES']='0'
 import random
 import time
 from collections import namedtuple
@@ -29,7 +29,11 @@ from datasets.chaos_eval import ChaosEvaluator
 from engine import evaluate, train_one_epoch
 from models import build_model
 from models.postprocessors import build_postprocessors
-# from torch.utils.tensorboard import SummaryWriter
+import time
+# TODO: Solving the Error: RuntimeError: unable to open shared memory object </torch_1297412_2834938725> in read-write mode
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
+import ipdb
 
 
 def get_args_parser():
@@ -60,12 +64,12 @@ def get_args_parser():
     )
 
     # Training hyper-parameters
-    parser.add_argument("--lr", default=5e-5, type=float)
+    parser.add_argument("--lr", default=1e-5, type=float)
     parser.add_argument("--lr_backbone", default=1e-5, type=float)
-    parser.add_argument("--text_encoder_lr", default=5e-5, type=float)
+    parser.add_argument("--text_encoder_lr", default=1e-5, type=float)
     parser.add_argument("--batch_size", default=1, type=int)
     parser.add_argument("--weight_decay", default=1e-4, type=float)
-    parser.add_argument("--epochs", default=10, type=int)
+    parser.add_argument("--epochs", default=20, type=int)
     parser.add_argument("--lr_drop", default=10, type=int)
     parser.add_argument(
         "--epoch_chunks",
@@ -222,7 +226,7 @@ def get_args_parser():
         help="Whether to run evaluation on val or test set",
     )
     parser.add_argument(
-        "--output-dir", default="", help="path where to save, empty for no saving"
+        "--output_dir", default="", help="path where to save, empty for no saving"
     )
     parser.add_argument(
         "--device", default="cuda", help="device to use for training / testing"
@@ -238,7 +242,7 @@ def get_args_parser():
         "--start-epoch", default=0, type=int, metavar="N", help="start epoch"
     )
     parser.add_argument("--eval", action="store_true", help="Only run evaluation")
-    parser.add_argument("--num_workers", default=0, type=int)
+    parser.add_argument("--num_workers", default=8, type=int)
 
     # Distributed training parameters
     parser.add_argument(
@@ -265,6 +269,8 @@ def get_args_parser():
         help="maximum number of frames used by the model - may it differ from video_max_len, the model ensembles start-end probability predictions at eval time",
     )
     parser.add_argument("--stride", type=int, default=5, help="temporal stride k")
+    # TODO: the reason of fps? 
+    # TODO: 先测试fps=5的时候的情况，然后看效果如何。
     parser.add_argument(
         "--fps",
         type=int,
@@ -351,12 +357,15 @@ def main(args):
         with open(args.dataset_config, "r") as f:
             cfg = json.load(f)
         d.update(cfg)
-    output_dir = Path(args.output_dir)
+    current_time = time.asctime(time.localtime(time.time())).replace(" ", "_")
+    output_dir = os.path.join(Path(args.output_dir), current_time)  #TODO: add a new folder.
+    os.makedirs(output_dir) # time shold not repeated.
     logger = setup_logger("Video Grounding", output_dir, 'train_log.txt' )
     logger.info("git:\n  {}\n".format(utils.get_sha()))
     logger.info('Args:\n {}'.format(args))
 
     device = torch.device(args.device)
+    torch.backends.cudnn.benchmark=True
 
     # fix the seed for reproducibility
     seed = args.seed + dist.get_rank()
@@ -615,10 +624,10 @@ def main(args):
                 ChaosEvaluator(
                     args.chaos_ann_path,
                     "test" if args.test else "val",
-                    iou_thresholds=[0.3, 0.5],
+                    iou_thresholds=[0.1, 0.3, 0.5],
                     fps=args.fps,
                     video_max_len=args.video_max_len,
-                    save_pred=args.test,
+                    save_pred=True,
                     tmp_loc=args.sted,
                 )
             )
@@ -690,7 +699,7 @@ def main(args):
             # writer=writer,
         )
         if args.output_dir:
-            checkpoint_paths = [output_dir / "checkpoint.pth"]
+            checkpoint_paths = [os.path.join(output_dir, "checkpoint.pth")]
             # extra checkpoint before LR drop and every 2 epochs
             if (
                 (epoch + 1) % args.lr_drop == 0
@@ -698,7 +707,7 @@ def main(args):
                 or (args.combine_datasets_val[0] == "vidstg")
                 or (args.combine_datasets_val[0] == "chaos")
             ):
-                checkpoint_paths.append(output_dir / f"checkpoint{epoch:04}.pth")
+                checkpoint_paths.append(os.path.join(output_dir,  f"checkpoint{epoch:04}.pth"))
             for checkpoint_path in checkpoint_paths:
                 dist.save_on_master(
                     {
@@ -710,7 +719,7 @@ def main(args):
                     },
                     checkpoint_path,
                 )
-
+ 
         if (epoch + 1) % args.eval_skip == 0:
             test_stats = {}
             test_model = model_ema if model_ema is not None else model
@@ -743,7 +752,8 @@ def main(args):
         }
 
         if args.output_dir and dist.is_main_process():
-            with (output_dir / "log.txt").open("a") as f:
+            # with (os.path.join(output_dir, "log.txt")).open("a") as f:
+            with open(os.path.join(output_dir, "log.txt"), 'w') as f:
                 f.write(json.dumps(log_stats) + "\n")
 
     total_time = time.time() - start_time
