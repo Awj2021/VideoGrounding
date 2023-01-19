@@ -185,7 +185,7 @@ class ChaosiouEvaluator:
                     frame_id in inter_predgt and self.tmp_loc
                 ):  # update viou if this frame is in the intersection between the annotated moment and the predicted moment
                     viou += iou  # TODO: 我感觉是这里没有相加。
-                    print('=== Add iou! {} ==='.format(viou))
+                    # print('=== Add iou! {} ==='.format(viou))
                 gt_viou += iou
 
             if self.tmp_loc:  # compute viou@R

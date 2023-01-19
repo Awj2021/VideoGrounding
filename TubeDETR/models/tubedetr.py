@@ -79,6 +79,7 @@ class TubeDETR(nn.Module):
 
         self.input_proj = nn.Conv2d(backbone.num_channels, hidden_dim, kernel_size=1)
         self.backbone = backbone
+        # TODO: 在backbone之后添加相应的模块
         self.aux_loss = aux_loss
 
         self.video_max_len = video_max_len

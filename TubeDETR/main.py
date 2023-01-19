@@ -5,7 +5,7 @@ import argparse
 import datetime
 import json
 import os
-os.environ['CUDA_VISIBLE_DEVICES']='0'
+os.environ['CUDA_VISIBLE_DEVICES']='1'
 import random
 import time
 from collections import namedtuple
@@ -373,7 +373,7 @@ def main(args):
     np.random.seed(seed)
     random.seed(seed)
     # torch.set_deterministic(True)
-    torch.use_deterministic_algorithms(True)
+    # torch.use_deterministic_algorithms(True)
 
     # Build the model
     model, criterion, weight_dict = build_model(args)
@@ -390,7 +390,7 @@ def main(args):
     logger.info('Training distributed: {}'.format(args.distributed))
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     logger.info("number of params: {}".format(n_parameters))
-
+    torch.cuda.empty_cache()
     # Set up optimizers
     param_dicts = [
         {
@@ -698,6 +698,8 @@ def main(args):
             model_ema=model_ema,
             # writer=writer,
         )
+        if hasattr(torch.cuda, 'empty_cache'):
+          torch.cuda.empty_cache()
         if args.output_dir:
             checkpoint_paths = [os.path.join(output_dir, "checkpoint.pth")]
             # extra checkpoint before LR drop and every 2 epochs

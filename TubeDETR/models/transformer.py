@@ -15,7 +15,7 @@ from typing import List, Optional
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from transformers import RobertaModel, RobertaTokenizer
+from transformers import RobertaModel, RobertaTokenizer, RobertaTokenizerFast
 import math
 
 from .position_encoding import TimeEmbeddingSine, TimeEmbeddingLearned

@@ -15,5 +15,5 @@ set -e
 
 
 # TODO: Only use one sample for evaluation.
-CUDA_VISIBLE_DEVICES=0 CUBLAS_WORKSPACE_CONFIG=:16:8 python main.py --load=/data/chaos/models/VG/pretrained_resnet101_checkpoint.pth \
+CUDA_VISIBLE_DEVICES=1 CUBLAS_WORKSPACE_CONFIG=:16:8 python main.py --load=/data/chaos/models/VG/pretrained_resnet101_checkpoint.pth \
 --combine_datasets=chaos --combine_datasets_val=chaos --dataset_config config/chaos.json --output_dir=output

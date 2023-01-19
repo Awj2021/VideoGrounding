@@ -55,7 +55,7 @@ class VidSTGiouEvaluator:
                 video["start_frame"] if self.tmp_loc else video["tube_start_frame"]
             )
             end_frame = (
-                video["end_frame"] if self.tmp_loc else video["tube_start_frame"]
+                video["end_frame"] if self.tmp_loc else video["tube_end_frame"]
             )
             frame_ids = [start_frame]
             for frame_id in range(start_frame, end_frame):
