@@ -2,6 +2,6 @@
     "combine_datasets": ["chaos"],
     "combine_datasets_val": ["chaos"],
     "chaos_vid_path" : "/data/chaos/videos_320x180",
-    "chaos_ann_path" : "/data/chaos/VG_big_format",
+    "chaos_ann_path" : "/home/chaos/data/Chaos/dataset/annotation/expanded1_2022-12-28/VG_big_format/split/split",
     "chaos_extract_dir": "/data/chaos/tube_extract_frames/"
   }

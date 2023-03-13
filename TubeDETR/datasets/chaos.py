@@ -9,7 +9,7 @@ import numpy as np
 import random
 import ipdb
 from tqdm import tqdm
-
+import ipdb
 class VideoModulatedSTGrounding(Dataset):
     def __init__(
         self,
@@ -60,7 +60,7 @@ class VideoModulatedSTGrounding(Dataset):
             {}
         )  # map video_id to [list of frames to be forwarded, list of frames in the annotated moment]
         self.stride = stride
-        # self.videos = []
+        # ipdb.set_trace()
         for i_vid, video in enumerate(self.annotations["videos"]):
             ### Checking the size of videos.
             vid_path = os.path.join(self.vid_folder, str(video["video_path"]))
@@ -154,8 +154,14 @@ class VideoModulatedSTGrounding(Dataset):
         # images_list = np.frombuffer(out, np.uint8).reshape([-1, h, w, 3]) # 问题确认：报错是因为out转换之后，不能整除进行转换。
         # ipdb.set_trace()
         # TODO: here:read the saved npy file. npy file named with video_id.
+        # how to generate these .npy files.
         images_list = np.load(os.path.join(self.frames_folder, video_id + '.npy')).reshape([-1, h, w, 3])
-        assert len(images_list) == len(frame_ids)
+        # ipdb.set_trace()
+        # assert len(images_list) == len(frame_ids)
+        if len(images_list) > len(frame_ids):
+            images_list = images_list[:len(frame_ids)]
+        if len(frame_ids) > len(images_list):
+            frame_ids = frame_ids[:len(images_list)]
 
         # prepare frame-level targets
         targets_list = []
@@ -316,6 +322,7 @@ class VideoModulatedSTGrounding(Dataset):
             ss = clip_start / video_fps             # 帧开始的时间，
             t = (clip_end - clip_start) / video_fps # 相于开始帧，结束帧的相对时间
             # TODO: directly read the corresponding frames that has been extraced.
+            # ipdb.set_trace()
             try:
                 cmd = ffmpeg.input(vid_path, ss=ss, t=t).filter("fps", fps=len(frame_ids) / t) # fps: len(frame_ids) / t: 单位时间内采样的帧数
                 out, _ = cmd.output("pipe:", format="rawvideo", pix_fmt="rgb24").run(
@@ -330,20 +337,19 @@ class VideoModulatedSTGrounding(Dataset):
         print("====== Extracting and Saving frames successfully ========")
         
 
-
 def build(image_set, args, logger):
     vid_dir = Path(args.chaos_vid_path)
     extract_frames_dir = Path(args.chaos_extract_dir)
     if not os.path.exists(extract_frames_dir):
         os.makedirs(extract_frames_dir)
-
+    # TODO: 
     if args.test:
-        ann_file = Path(args.chaos_ann_path) / f"test.json"
+        ann_file = Path(args.chaos_ann_path) / f"test_xywh.json"
     elif image_set == "val":
-        ann_file = Path(args.chaos_ann_path) / f"val.json"
+        ann_file = Path(args.chaos_ann_path) / f"val_xywh.json"
     else:
         ann_file = (
-            Path(args.chaos_ann_path) / f"train.json"
+            Path(args.chaos_ann_path) / f"train_xywh.json"
             if args.video_max_len_train == 200 or (not args.sted)
             else Path(args.chaos_ann_path) / f"train_{args.video_max_len_train}.json"
         )

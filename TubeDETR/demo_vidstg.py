@@ -13,6 +13,18 @@ from models.tubedetr import TubeDETR
 from models.postprocessors import PostProcessSTVG, PostProcess
 from datasets.video_transforms import prepare, make_video_transforms
 from util.misc import NestedTensor
+import json
+
+def load_json(data_dir):
+    """
+    load the json file.
+    args:
+        data_dir: the dir of annotation.
+    """
+    with open(data_dir, 'r') as f:
+        data = json.load(f)
+    f.close()
+    return data
 
 parser = argparse.ArgumentParser(
     "TubeDETR training and evaluation script", parents=[get_args_parser()]
@@ -69,6 +81,9 @@ else:
 print("checkpoint loaded")
 
 # load video (with eventual start & end) & caption demo examples
+
+# TODO: add the loop for all the val data of VidSTG.
+ann_data = load_json('/home/chaos/data/Chaos/video_grounding_old/data/VidST/val.json')
 captions = [args.caption_example]
 vid_path = args.video_example
 # get video metadata

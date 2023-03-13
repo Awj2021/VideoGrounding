@@ -5,7 +5,7 @@ import argparse
 import datetime
 import json
 import os
-os.environ['CUDA_VISIBLE_DEVICES']='0'
+os.environ['CUDA_VISIBLE_DEVICES']='1'
 import random
 import time
 from collections import namedtuple
@@ -242,7 +242,7 @@ def get_args_parser():
         "--start-epoch", default=0, type=int, metavar="N", help="start epoch"
     )
     parser.add_argument("--eval", action="store_true", help="Only run evaluation")
-    parser.add_argument("--num_workers", default=8, type=int)
+    parser.add_argument("--num_workers", default=0, type=int)
 
     # Distributed training parameters
     parser.add_argument(
@@ -340,7 +340,7 @@ def get_args_parser():
         help="potential start (seconds) for STVG demo, =end of the video if <0",
     )
     parser.add_argument(
-        "--port", default=80, type=int, help="port for the STVG online demo"
+        "--port", default=81, type=int, help="port for the STVG online demo"
     )
 
     return parser
@@ -348,7 +348,6 @@ def get_args_parser():
 
 def main(args):
     # Init distributed mode
-    # TODO: maybe could use the distributed mode.
     dist.init_distributed_mode(args)
     # Update dataset specific configs
     if args.dataset_config is not None:
@@ -493,7 +492,7 @@ def main(args):
             data_loader_train = DataLoader(
                 dataset_train,
                 batch_sampler=batch_sampler_train,
-                # batch_size=1,
+                batch_size=1,
                 collate_fn=partial(utils.video_collate_fn, False, 0),
                 num_workers=args.num_workers,
                 pin_memory=True,
@@ -632,11 +631,6 @@ def main(args):
                 )
             )
         return evaluator_list
-
-    # if args.tb_dir and dist.is_main_process():
-    #     writer = SummaryWriter(args.tb_dir)
-    # else:
-    #     writer = None
 
     # Runs only evaluation, by default on the validation set unless --test is passed.
     if args.eval:

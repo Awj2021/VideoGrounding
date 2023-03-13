@@ -39,7 +39,7 @@ class ChaosiouEvaluator:
         chaos_path = Path(chaos_path)
 
         # We load the image ids corresponding to the current subset
-        path = chaos_path / f"{subset}.json"
+        path = chaos_path / f"{subset}_xywh.json"
         self.anns = json.load(open(path, "r"))
         self.vid2imgids = (
             {}
