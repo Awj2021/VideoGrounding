@@ -16,6 +16,6 @@ set -e
 
 # TODO: Only use one sample for evaluation.
 # FIXME: Please check the branch of git before training.
-CUDA_VISIBLE_DEVICES=1 CUBLAS_WORKSPACE_CONFIG=:16:8 python -m torch.distributed.launch --nproc_per_node=1 --use_env --master_port 47769 main.py --ema \
+CUDA_VISIBLE_DEVICES=0 CUBLAS_WORKSPACE_CONFIG=:16:8 python -m torch.distributed.launch --nproc_per_node=1 --use_env --master_port 47769 main.py --ema \
 --load=/data/chaos/models/VG/pretrained_resnet101_checkpoint.pth \
 --combine_datasets=chaos --combine_datasets_val=chaos --dataset_config config/chaos.json --output_dir=output
